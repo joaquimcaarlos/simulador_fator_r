@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Planejador Tributário - ECTOS</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-body: #121214; --bg-container: #1e1e24; --bg-card: #2b2b36;
+            --text-main: #ffffff; --text-muted: #a0a0b0;
+            --green: #2ecc71; --blue: #3498db; --red: #e74c3c; --yellow: #f1c40f;
+            --border-radius: 12px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        body { background-color: var(--bg-body); color: var(--text-main); padding: 20px; display: flex; justify-content: center; }
+        .container { background-color: var(--bg-container); max-width: 1050px; width: 100%; padding: 30px; border-radius: var(--border-radius); box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        
+        .header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #3a3a45; padding-bottom: 20px; flex-wrap: wrap; gap: 20px;}
+        .header-top h1 { font-size: 22px; font-weight: 600; color: #fff; }
+        .summary-stats { display: flex; gap: 30px; }
+        .stat-item { display: flex; flex-direction: column; }
+        .stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+        .stat-value { font-size: 18px; font-weight: bold; }
+
+        /* TAB NAVIGATION */
+        .tabs { display: flex; gap: 10px; margin-bottom: 25px; border-bottom: 1px solid #3a3a45; padding-bottom: 10px; }
+        .tab-btn { background: transparent; border: none; color: var(--text-muted); font-size: 15px; font-weight: 600; padding: 10px 20px; cursor: pointer; transition: all 0.3s; border-radius: 6px; }
+        .tab-btn.active { background: var(--bg-card); color: var(--green); border: 1px solid #3a3a45; }
+        .tab-btn:hover { color: #fff; }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* GRID DE MESES (MODO VARIÁVEL) */
+        .grid-historico { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; background: #16161a; padding: 20px; border-radius: 8px; border: 1px solid #3a3a45; margin-bottom: 20px; }
+        .mes-row { display: flex; flex-direction: column; gap: 5px; background: var(--bg-card); padding: 10px; border-radius: 6px; }
+        .mes-row label { font-size: 11px; color: var(--text-muted); font-weight: bold; text-align: center; }
+        .mes-row input { background: #1e1e24; border: 1px solid #3a3a45; color: white; padding: 6px; border-radius: 4px; font-size: 12px; text-align: right; width: 100%; }
+        .mes-row input:focus { border-color: var(--blue); outline: none; }
+        
+        .historico-resumo { display: flex; justify-content: space-around; background: rgba(46, 204, 113, 0.1); padding: 15px; border-radius: 6px; border: 1px dashed var(--green); margin-bottom: 25px; }
+        .resumo-item { text-align: center; }
+        .resumo-item span { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 5px; }
+        .resumo-item strong { font-size: 18px; color: var(--green); }
+
+        /* INPUTS GERAIS */
+        .inputs-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px; }
+        .input-group { display: flex; flex-direction: column; }
+        .input-group.full-width { grid-column: 1 / -1; } 
+        .input-group label { font-size: 12px; color: var(--text-muted); margin-bottom: 5px; }
+        .input-group input, .input-group select { background-color: var(--bg-card); border: 1px solid #3a3a45; color: white; padding: 10px; border-radius: 6px; font-size: 14px; outline: none; transition: border 0.3s; width: 100%; }
+        .input-group input[readonly] { background-color: #16161a; color: #7f8c8d; cursor: not-allowed; }
+        .input-group input:focus { border-color: var(--blue); }
+        input[list]::-webkit-calendar-picker-indicator { filter: invert(1); opacity: 0.6; cursor: pointer; }
+
+        button.btn-calcular { width: 100%; background-color: var(--green); color: #000; font-weight: bold; border: none; padding: 15px; border-radius: 6px; cursor: pointer; transition: opacity 0.3s; font-size: 16px; margin-bottom: 20px;}
+        button.btn-calcular:hover { opacity: 0.8; }
+
+        /* CARDS E GRAFICO (Mantidos do anterior) */
+        .cards-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+        .card { background-color: var(--bg-card); border-radius: var(--border-radius); padding: 25px; position: relative; border: 2px solid transparent; transition: all 0.3s ease; }
+        .card.melhor-escolha { border-color: var(--green); box-shadow: 0 0 20px rgba(46, 204, 113, 0.15); }
+        .badge-melhor { display: none; position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background-color: var(--green); color: #000; font-size: 10px; font-weight: bold; padding: 4px 12px; border-radius: 20px; letter-spacing: 1px; }
+        .card.melhor-escolha .badge-melhor { display: block; }
+        .card.melhor-escolha .card-title, .card.melhor-escolha .card-total { color: var(--green); }
+        .card-title { text-align: center; font-size: 18px; margin-bottom: 15px; font-weight: 600; color: #fff; }
+        .card-total { text-align: center; font-size: 32px; font-weight: bold; color: var(--blue); margin-bottom: 25px; }
+        .breakdown-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 25px; }
+        .breakdown-item { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--text-muted); }
+        .breakdown-item-left { display: flex; align-items: center; gap: 8px; }
+        .color-box { width: 12px; height: 12px; border-radius: 2px; }
+        .bg-blue { background-color: var(--blue); } .bg-green { background-color: var(--green); } .bg-red { background-color: var(--red); } .bg-yellow { background-color: var(--yellow); }
+        .carga-efetiva { text-align: center; font-size: 13px; color: var(--text-muted); padding-top: 15px; border-top: 1px solid #3a3a45; }
+        .chart-container { margin-top: 40px; position: relative; height: 350px; width: 100%; border-top: 1px solid #3a3a45; padding-top: 30px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header-top">
+        <h1>Planejador Tributário - ECTOS</h1>
+        <div class="summary-stats">
+            <div class="stat-item">
+                <span class="stat-label">Melhor Opção</span>
+                <span class="stat-value" id="resumo-opcao" style="color: var(--green);">Anexo III</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Custo Mínimo</span>
+                <span class="stat-value" id="resumo-custo">R$ 0,00</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="tabs">
+        <button class="tab-btn active" onclick="mudarAba('rapido', this)">📊 Modo Rápido (Estimado)</button>
+        <button class="tab-btn" onclick="mudarAba('historico', this)">📅 Modo Histórico (Receita Variável)</button>
+    </div>
+
+    <div class="inputs-grid">
+        <div class="input-group full-width">
+            <label>Buscar Atividade / CNAE Principal</label>
+            <input list="lista-cnaes" id="atividade" placeholder="Digite a atividade (ex: Fisioterapia, Software)..." oninput="calcular()">
+            <datalist id="lista-cnaes">
+                <option value="[8650-0/04] Fisioterapia">
+                <option value="[8630-5/03] Medicina">
+                <option value="[8630-5/04] Odontologia">
+                <option value="[8650-0/03] Psicologia">
+                <option value="[6201-5/01] Desenvolvimento de Software">
+                <option value="[7112-0/00] Engenharia">
+            </datalist>
+        </div>
+    </div>
+
+    <div id="aba-historico" class="tab-content">
+        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 10px;">Preencha os últimos 12 meses anteriores ao mês de cálculo para encontrar o RBT12 e FS12 reais.</p>
+        <div class="grid-historico" id="grid-meses">
+            </div>
+        <div class="historico-resumo">
+            <div class="resumo-item"><span>RBT12 Calculado</span><strong id="calc-rbt12">R$ 0,00</strong></div>
+            <div class="resumo-item"><span>Folha (FS12) Calculada</span><strong id="calc-fs12">R$ 0,00</strong></div>
+            <div class="resumo-item"><span>Fator R Atual</span><strong id="calc-fatorR">0.00%</strong></div>
+        </div>
+    </div>
+
+    <div class="inputs-grid">
+        <div class="input-group">
+            <label>Faturamento Mês Atual (R$)</label>
+            <input type="number" id="fatMes" value="8000" onkeyup="calcular()" onchange="calcular()">
+        </div>
+        <div class="input-group" id="grupo-rbt12">
+            <label>RBT12 Total (R$)</label>
+            <input type="number" id="rbt12" value="0" onkeyup="calcular()" onchange="calcular()">
+        </div>
+        <div class="input-group" id="grupo-fs12" style="display: none;">
+            <label>FS12 Total (R$)</label>
+            <input type="number" id="fs12" value="0" onkeyup="calcular()" onchange="calcular()">
+        </div>
+        <div class="input-group">
+            <label>Despesas Caixa CPF (R$)</label>
+            <input type="number" id="despCaixa" value="0" onkeyup="calcular()" onchange="calcular()">
+        </div>
+        <div class="input-group">
+            <label>Alíquota ISS (%)</label>
+            <input type="number" id="aliqISS" value="3" onkeyup="calcular()" onchange="calcular()">
+        </div>
+        <div class="input-group">
+            <label>Base INSS (Autônomo CPF)</label>
+            <select id="baseInssPF" onchange="calcular()">
+                <option value="zero">Não Recolher (R$ 0,00)</option>
+                <option value="real">Faturamento Real (Regra: 20%)</option>
+                <option value="minimo">Salário Mínimo</option>
+            </select>
+        </div>
+    </div>
+
+    <button class="btn-calcular" onclick="calcular()">PROCESSAR SIMULAÇÃO TRIBUTÁRIA</button>
+
+    <div class="cards-grid">
+        <div class="card" id="card-a3">
+            <div class="badge-melhor">MELHOR ESCOLHA</div>
+            <div class="card-title">Anexo III (Fator R)</div>
+            <div class="card-total" id="total-a3">R$ 0,00</div>
+            <div class="breakdown-list">
+                <div class="breakdown-item">
+                    <div class="breakdown-item-left"><div class="color-box bg-blue"></div> Imposto PJ (DAS)</div>
+                    <span id="das-a3">R$ 0,00</span>
+                </div>
+                <div class="breakdown-item">
+                    <div class="breakdown-item-left"><div class="color-box bg-green"></div> Pró-labore Retenções</div>
+                    <span id="inss-a3">R$ 0,00</span>
+                </div>
+                <div class="breakdown-item">
+                    <div class="breakdown-item-left" style="font-size: 11px; color: var(--yellow);">↳ Pró-labore Usado:</div>
+                    <span id="valor-prolabore" style="font-size: 11px; color: var(--yellow);">R$ 0,00</span>
+                </div>
+            </div>
+            <div class="carga-efetiva" id="carga-a3">Carga Efetiva: 0.0%</div>
+        </div>
+
+        <div class="card" id="card-a5">
+            <div class="badge-melhor">MELHOR ESCOLHA</div>
+            <div class="card-title">Anexo V</div>
+            <div class="card-total" style="color: var(--text-main);" id="total-a5">R$ 0,00</div>
+            <div class="breakdown-list">
+                <div class="breakdown-item">
+                    <div class="breakdown-item-left"><div class="color-box bg-blue"></div> Imposto PJ (DAS)</div>
+                    <span id="das-a5">R$ 0,00</span>
+                </div>
+            </div>
+            <div class="carga-efetiva" id="carga-a5">Carga Efetiva: 0.0%</div>
+        </div>
+
+        <div class="card" id="card-cpf">
+            <div class="badge-melhor">MELHOR ESCOLHA</div>
+            <div class="card-title">Pessoa Física (CPF)</div>
+            <div class="card-total" style="color: var(--text-main);" id="total-cpf">R$ 0,00</div>
+            <div class="breakdown-list">
+                <div class="breakdown-item">
+                    <div class="breakdown-item-left"><div class="color-box bg-yellow"></div> Imposto Mun. (ISS)</div>
+                    <span id="iss-cpf">R$ 0,00</span>
+                </div>
+                <div class="breakdown-item">
+                    <div class="breakdown-item-left"><div class="color-box bg-green"></div> Imposto PF (INSS)</div>
+                    <span id="inss-cpf">R$ 0,00</span>
+                </div>
+                <div class="breakdown-item">
+                    <div class="breakdown-item-left"><div class="color-box bg-red"></div> Imposto PF (IRPF)</div>
+                    <span id="irpf-cpf">R$ 0,00</span>
+                </div>
+            </div>
+            <div class="carga-efetiva" id="carga-cpf">Carga Efetiva: 0.0%</div>
+        </div>
+    </div>
+
+    <div class="chart-container">
+        <canvas id="graficoComparativo"></canvas>
+    </div>
+</div>
+
+<script>
+    let meuGrafico = null;
+    let modoAtual = 'rapido'; // 'rapido' ou 'historico'
+
+    Chart.defaults.color = '#a0a0b0';
+    Chart.defaults.borderColor = '#3a3a45';
+
+    // Gera as 12 linhas do histórico
+    function gerarGridHistorico() {
+        const grid = document.getElementById('grid-meses');
+        for (let i = 1; i <= 12; i++) {
+            grid.innerHTML += `
+                <div class="mes-row">
+                    <label>Mês M-${13-i}</label>
+                    <input type="number" class="hist-fat" placeholder="Fat (R$)" onchange="somarHistorico()">
+                    <input type="number" class="hist-folha" placeholder="Folha (R$)" onchange="somarHistorico()">
+                </div>
+            `;
+        }
+    }
+
+    function mudarAba(modo, btn) {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        modoAtual = modo;
+
+        const abaHist = document.getElementById('aba-historico');
+        const inputRBT12 = document.getElementById('rbt12');
+        const grupoFS12 = document.getElementById('grupo-fs12');
+
+        if (modo === 'historico') {
+            abaHist.classList.add('active');
+            grupoFS12.style.display = 'flex';
+            inputRBT12.readOnly = true;
+            document.getElementById('fs12').readOnly = true;
+            somarHistorico();
+        } else {
+            abaHist.classList.remove('active');
+            grupoFS12.style.display = 'none';
+            inputRBT12.readOnly = false;
+            document.getElementById('fs12').readOnly = false;
+        }
+        calcular();
+    }
+
+    function somarHistorico() {
+        let somaFat = 0;
+        let somaFolha = 0;
+        
+        document.querySelectorAll('.hist-fat').forEach(inp => somaFat += parseFloat(inp.value) || 0);
+        document.querySelectorAll('.hist-folha').forEach(inp => somaFolha += parseFloat(inp.value) || 0);
+
+        document.getElementById('calc-rbt12').innerText = formatarMoeda(somaFat);
+        document.getElementById('calc-fs12').innerText = formatarMoeda(somaFolha);
+        
+        let fatorR = somaFat > 0 ? (somaFolha / somaFat) * 100 : 0;
+        document.getElementById('calc-fatorR').innerText = fatorR.toFixed(2) + '%';
+        document.getElementById('calc-fatorR').style.color = fatorR >= 28 ? 'var(--green)' : 'var(--red)';
+
+        // Atualiza os inputs bloqueados
+        document.getElementById('rbt12').value = somaFat;
+        document.getElementById('fs12').value = somaFolha;
+    }
+
+    // --- ALÍQUOTAS EFETIVAS DO SIMPLES NACIONAL (Tabelas Oficiais) ---
+    function aliquotaEfetivaSimples(rbt12, anexo) {
+        if (rbt12 === 0) rbt12 = 1; // Previne divisão por zero, usa a 1ª faixa
+
+        let aliqNominal = 0;
+        let deducao = 0;
+
+        if (anexo === 3) {
+            if (rbt12 <= 180000) { aliqNominal = 0.06; deducao = 0; }
+            else if (rbt12 <= 360000) { aliqNominal = 0.112; deducao = 9360; }
+            else if (rbt12 <= 720000) { aliqNominal = 0.135; deducao = 17640; }
+            else if (rbt12 <= 1800000) { aliqNominal = 0.16; deducao = 35640; }
+            else if (rbt12 <= 3600000) { aliqNominal = 0.21; deducao = 125640; }
+            else { aliqNominal = 0.33; deducao = 648000; }
+        } else if (anexo === 5) {
+            if (rbt12 <= 180000) { aliqNominal = 0.155; deducao = 0; }
+            else if (rbt12 <= 360000) { aliqNominal = 0.18; deducao = 4500; }
+            else if (rbt12 <= 720000) { aliqNominal = 0.195; deducao = 9900; }
+            else if (rbt12 <= 1800000) { aliqNominal = 0.205; deducao = 17100; }
+            else if (rbt12 <= 3600000) { aliqNominal = 0.23; deducao = 62100; }
+            else { aliqNominal = 0.305; deducao = 540000; }
+        }
+
+        let aliquotaEfetiva = ((rbt12 * aliqNominal) - deducao) / rbt12;
+        return aliquotaEfetiva > 0 ? aliquotaEfetiva : aliqNominal; // Trava segurança
+    }
+
+    function calcular() {
+        const fatMes = parseFloat(document.getElementById('fatMes').value) || 0;
+        const rbt12 = parseFloat(document.getElementById('rbt12').value) || 0;
+        let fs12 = parseFloat(document.getElementById('fs12').value) || 0;
+        
+        const despCaixa = parseFloat(document.getElementById('despCaixa').value) || 0;
+        const aliqISS = parseFloat(document.getElementById('aliqISS').value) || 0;
+        const tipoBaseINSS = document.getElementById('baseInssPF').value;
+        const baseCarga = fatMes > 0 ? fatMes : 1; 
+
+        const tetoINSS = 8475.55; 
+        const salarioMinimo = 1621.00;
+
+        // --- LÓGICA DO FATOR R ---
+        let proLaboreIdeal = 0;
+        
+        if (modoAtual === 'historico') {
+            // Se o histórico já garante os 28%, o pró-labore do mês pode ser só o mínimo legal
+            let fatorRAtual = rbt12 > 0 ? fs12 / rbt12 : 0;
+            if (fatorRAtual >= 0.28) {
+                proLaboreIdeal = salarioMinimo;
+            } else {
+                // Fator R histórico está ruim. A regra é: quanto precisa gerar ESTE mês para bater 28% no mês que vem?
+                // Cálculo: Folha Mínima Necessária = (RBT12 + FatMes) * 0.28. 
+                // Subtraímos a folha que já existe (FS12).
+                let folhaNecessaria = (rbt12 + fatMes) * 0.28;
+                proLaboreIdeal = folhaNecessaria - fs12;
+                if (proLaboreIdeal < salarioMinimo) proLaboreIdeal = salarioMinimo;
+            }
+        } else {
+            // Modo rápido (estimativa direta sobre o faturamento do mês)
+            proLaboreIdeal = fatMes * 0.28;
+            if (proLaboreIdeal < salarioMinimo && fatMes > 0) proLaboreIdeal = salarioMinimo;
+        }
+
+        // --- CÁLCULOS ANEXOS (PJ) ---
+        // Acha a alíquota efetiva baseada no RBT12 real inserido
+        let aliqEfetivaA3 = aliquotaEfetivaSimples(rbt12, 3);
+        const dasAnexo3 = fatMes * aliqEfetivaA3; 
+        
+        const inssA3 = proLaboreIdeal * 0.11;
+        const baseIRPFA3 = proLaboreIdeal - inssA3; 
+        const irpfA3 = calcularIRPF_2026(baseIRPFA3 > 0 ? baseIRPFA3 : 0); 
+        const custoTotalA3 = dasAnexo3 + inssA3 + irpfA3;
+
+        let aliqEfetivaA5 = aliquotaEfetivaSimples(rbt12, 5);
+        const dasAnexo5 = fatMes * aliqEfetivaA5; 
+        const custoTotalA5 = dasAnexo5;
+
+        // --- CÁLCULOS CPF ---
+        const issCPF = fatMes * (aliqISS / 100);
+        let inssCPF = 0;
+        if (tipoBaseINSS === 'minimo') { inssCPF = salarioMinimo * 0.20; } 
+        else if (tipoBaseINSS === 'real') { inssCPF = (fatMes > tetoINSS ? tetoINSS : fatMes) * 0.20; }
+        
+        const baseIRPF_CPF = fatMes - despCaixa - inssCPF - issCPF;
+        const irpfCPF = calcularIRPF_2026(baseIRPF_CPF > 0 ? baseIRPF_CPF : 0);
+        const custoTotalCPF = issCPF + inssCPF + irpfCPF;
+
+        // --- ATUALIZAR INTERFACE ---
+        document.getElementById('total-a3').innerText = formatarMoeda(custoTotalA3);
+        document.getElementById('das-a3').innerText = formatarMoeda(dasAnexo3) + ` (${(aliqEfetivaA3*100).toFixed(2)}%)`;
+        document.getElementById('inss-a3').innerText = formatarMoeda(inssA3 + irpfA3);
+        document.getElementById('valor-prolabore').innerText = formatarMoeda(proLaboreIdeal);
+        document.getElementById('carga-a3').innerText = `Carga Efetiva: ${((custoTotalA3/baseCarga)*100).toFixed(1)}%`;
+
+        document.getElementById('total-a5').innerText = formatarMoeda(custoTotalA5);
+        document.getElementById('das-a5').innerText = formatarMoeda(dasAnexo5) + ` (${(aliqEfetivaA5*100).toFixed(2)}%)`;
+        document.getElementById('carga-a5').innerText = `Carga Efetiva: ${((custoTotalA5/baseCarga)*100).toFixed(1)}%`;
+
+        document.getElementById('total-cpf').innerText = formatarMoeda(custoTotalCPF);
+        document.getElementById('iss-cpf').innerText = formatarMoeda(issCPF);
+        document.getElementById('inss-cpf').innerText = formatarMoeda(inssCPF);
+        document.getElementById('irpf-cpf').innerText = formatarMoeda(irpfCPF);
+        document.getElementById('carga-cpf').innerText = `Carga Efetiva: ${((custoTotalCPF/baseCarga)*100).toFixed(1)}%`;
+
+        determinarMelhorOpcao(custoTotalA3, custoTotalA5, custoTotalCPF);
+
+        renderizarGrafico(
+            [dasAnexo3, dasAnexo5, 0], 
+            [0, 0, issCPF],            
+            [inssA3, 0, inssCPF],      
+            [irpfA3, 0, irpfCPF]       
+        );
+    }
+
+    function determinarMelhorOpcao(a3, a5, cpf) {
+        document.getElementById('card-a3').classList.remove('melhor-escolha');
+        document.getElementById('card-a5').classList.remove('melhor-escolha');
+        document.getElementById('card-cpf').classList.remove('melhor-escolha');
+        document.getElementById('total-a5').style.color = 'var(--text-main)';
+        document.getElementById('total-cpf').style.color = 'var(--text-main)';
+
+        let menorValor = Math.min(a3, a5, cpf);
+        let textoOpcao = "";
+
+        if (menorValor === a3) {
+            document.getElementById('card-a3').classList.add('melhor-escolha');
+            textoOpcao = "Anexo III (Fator R)";
+        } else if (menorValor === a5) {
+            document.getElementById('card-a5').classList.add('melhor-escolha');
+            document.getElementById('total-a5').style.color = 'var(--green)';
+            textoOpcao = "Anexo V";
+        } else {
+            document.getElementById('card-cpf').classList.add('melhor-escolha');
+            document.getElementById('total-cpf').style.color = 'var(--green)';
+            textoOpcao = "Pessoa Física";
+        }
+
+        document.getElementById('resumo-opcao').innerText = textoOpcao;
+        document.getElementById('resumo-custo').innerText = formatarMoeda(menorValor);
+    }
+
+    function renderizarGrafico(arrDAS, arrISS, arrINSS, arrIRPF) {
+        const ctx = document.getElementById('graficoComparativo').getContext('2d');
+        if (meuGrafico) meuGrafico.destroy(); 
+
+        meuGrafico = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['Anexo III', 'Anexo V', 'Pessoa Física'],
+                datasets: [
+                    { label: 'DAS (Imposto Empresa)', data: arrDAS, backgroundColor: '#3498db', maxBarThickness: 60 },
+                    { label: 'ISS (Imposto Mun.)', data: arrISS, backgroundColor: '#f1c40f', maxBarThickness: 60 },
+                    { label: 'INSS (Previdência)', data: arrINSS, backgroundColor: '#2ecc71', maxBarThickness: 60 },
+                    { label: 'IRPF (Imposto Renda)', data: arrIRPF, backgroundColor: '#e74c3c', maxBarThickness: 60 }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } },
+                plugins: {
+                    legend: { position: 'bottom', labels: { boxWidth: 12, usePointStyle: true, padding: 20 } },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) { label += ': '; }
+                                if (context.parsed.y !== null) {
+                                    label += new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(context.parsed.y);
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function calcularIRPF_2026(base) {
+        let impostoTradicional = 0;
+        if (base <= 2428.80) { impostoTradicional = 0; } 
+        else if (base <= 2826.65) { impostoTradicional = (base * 0.075) - 182.16; } 
+        else if (base <= 3751.05) { impostoTradicional = (base * 0.15) - 394.16; } 
+        else if (base <= 4664.68) { impostoTradicional = (base * 0.225) - 675.49; } 
+        else { impostoTradicional = (base * 0.275) - 908.73; }
+        if (impostoTradicional < 0) impostoTradicional = 0;
+
+        if (base <= 5000.00) { return 0; } 
+        else if (base <= 7350.00) {
+            let redutor = 978.62 - (0.133145 * base);
+            if (redutor < 0) redutor = 0;
+            let impostoFinal = impostoTradicional - redutor;
+            return impostoFinal > 0 ? impostoFinal : 0;
+        } else { return impostoTradicional; }
+    }
+
+    function formatarMoeda(valor) { return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
+
+    // Init
+    window.onload = function() {
+        gerarGridHistorico();
+        calcular();
+    };
+</script>
+
+</body>
+</html>
